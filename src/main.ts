@@ -5,7 +5,6 @@ import type { Feature, FeatureCollection, Geometry, GeoJsonProperties } from 'ge
 type AnyFeature = Feature<Geometry, GeoJsonProperties>;
 type AnyFeatureCollection = FeatureCollection<Geometry, GeoJsonProperties>;
 
-// Fix for default markers in Leaflet with Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -33,11 +32,11 @@ fetch('/ABSStatisticalAreasLevel2_EPSG4326.geojson')
     }
     L.geoJSON(geoJsonData, {
       style: {
-        color: '#00008B', // Dark blue border
-        weight: 6, // Thicker border
-        opacity: 1, // Full opacity for outline
-        fillColor: '#00008B', // Dark blue fill
-        fillOpacity: 0.35 // Keep basemap visible
+        color: '#00008B',
+        weight: 6,
+        opacity: 1,
+        fillColor: '#00008B',
+        fillOpacity: 0.35
       },
       onEachFeature: (feature: AnyFeature, layer: L.Layer) => {
         const props = feature.properties;
@@ -58,7 +57,6 @@ fetch('/ABSStatisticalAreasLevel2_EPSG4326.geojson')
   })
   .catch((error: Error) => {
     console.error('Error loading GeoJSON:', error);
-    // Display error on map
     const errorDiv = document.createElement('div');
     errorDiv.innerHTML = `<h2>Error loading GeoJSON</h2><p>${error.message}</p>`;
     errorDiv.style.cssText = 'position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border: 1px solid red; z-index: 1000;';
