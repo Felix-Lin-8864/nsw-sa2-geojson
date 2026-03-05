@@ -1,99 +1,95 @@
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import type { Feature, FeatureCollection, Geometry, GeoJsonProperties } from 'geojson';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import type { FeatureCollection, Geometry, GeoJsonProperties } from 'geojson';
 
-type AnyFeature = Feature<Geometry, GeoJsonProperties>;
 type AnyFeatureCollection = FeatureCollection<Geometry, GeoJsonProperties>;
 
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+const MAPBOX_ACCESS_TOKEN =
+  '***REMOVED***REMOVED***REMOVED***';
+
+mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/light-v11',
+  center: [151.2093, -33.8688],
+  zoom: 10,
 });
 
-// Smooth rendering and interaction tuning
-const map: L.Map = L.map('map', {
-  preferCanvas: true,
-  zoomAnimation: true,
-  wheelDebounceTime: 10,
-  wheelPxPerZoomLevel: 60,
-  inertia: true,
-  inertiaDeceleration: 3000,
-}).setView([-33.8688, 151.2093], 10);
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution:
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  updateWhenIdle: true,
-}).addTo(map);
+map.on('load', () => {
+  fetch('/ABSStatisticalAreasLevel2_EPSG4326.geojson')
+    .then((response: Response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((data: any) => {
+      const geoJsonData: AnyFeatureCollection = data.ABSStatisticalAreasLevel2;
+      if (!geoJsonData || geoJsonData.type !== 'FeatureCollection') {
+        throw new Error(
+          'Invalid GeoJSON structure: expected FeatureCollection in ABSStatisticalAreasLevel2'
+        );
+      }
 
-// RNG-based Cancer Atlas–style choropleth ramp:
-// blue (low) → yellow/neutral (average) → red (high) in discrete bands.
-function valueToCancerAtlasColor(value: number): string {
-  const v = Math.max(0, Math.min(1, value));
-
-  if (v < 0.15) return '#2166ac'; // dark blue (much lower)
-  if (v < 0.3) return '#67a9cf';  // mid blue
-  if (v < 0.45) return '#d1e5f0'; // pale blue
-  if (v < 0.6) return '#f7f7f7';  // near average (neutral / yellowish-light)
-  if (v < 0.75) return '#fddbc7'; // pale orange
-  if (v < 0.9) return '#ef8a62';  // orange
-  return '#b2182b';               // dark red (much higher)
-}
-
-fetch('/ABSStatisticalAreasLevel2_EPSG4326.geojson')
-  .then((response: Response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response.json();
-  })
-  .then((data: any) => {
-    const geoJsonData: AnyFeatureCollection = data.ABSStatisticalAreasLevel2;
-    if (!geoJsonData || geoJsonData.type !== 'FeatureCollection') {
-      throw new Error('Invalid GeoJSON structure: expected FeatureCollection in ABSStatisticalAreasLevel2');
-    }
-    L.geoJSON(geoJsonData, {
-      style: (feature?: AnyFeature | null) => {
-        const props = (feature?.properties || {}) as any;
-
-        if (typeof props._rngValue !== 'number') {
-          props._rngValue = Math.random();
+      geoJsonData.features.forEach((feature) => {
+        const props = (feature.properties ||= {} as GeoJsonProperties);
+        if (typeof (props as any)._rngValue !== 'number') {
+          (props as any)._rngValue = Math.random();
         }
+      });
 
-        const value: number = props._rngValue;
-        const fillColor = valueToCancerAtlasColor(value);
+      map.addSource('sa2', {
+        type: 'geojson',
+        data: geoJsonData,
+      });
 
-        return {
-          color: '#000000',
-          weight: 0.8,
-          opacity: 1,
-          fillColor,
-          fillOpacity: 0.9,
-        };
-      },
-      onEachFeature: (feature: AnyFeature, layer: L.Layer) => {
-        const props = feature.properties;
-        if (!props) return;
+      map.addLayer({
+        id: 'sa2-fill',
+        type: 'fill',
+        source: 'sa2',
+        paint: {
+          'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['get', '_rngValue'],
+            0,
+            'rgb(33,102,172)',
+            0.5,
+            'rgb(247,247,247)',
+            1,
+            'rgb(178,24,43)',
+          ],
+          'fill-opacity': 0.9,
+          'fill-outline-color': '#000000',
+        },
+      });
 
-        const name = (props as any).name ?? 'Unnamed';
-        let popupContent: string = '<h3>' + name + '</h3>';
+      map.on('click', 'sa2-fill', (e: any) => {
+        const feature = e.features && e.features[0];
+        if (!feature) return;
 
-        for (const key in props as any) {
+        const props = feature.properties || {};
+        const name = props.name ?? 'Unnamed';
+        let popupContent = `<h3>${name}</h3>`;
+
+        for (const key in props) {
           if (key !== 'name') {
-            popupContent += '<p><strong>' + key + ':</strong> ' + (props as any)[key] + '</p>';
+            popupContent += `<p><strong>${key}:</strong> ${props[key]}</p>`;
           }
         }
 
-        (layer as L.Path).bindPopup(popupContent);
-      }
-    }).addTo(map);
-  })
-  .catch((error: Error) => {
-    console.error('Error loading GeoJSON:', error);
-    const errorDiv = document.createElement('div');
-    errorDiv.innerHTML = `<h2>Error loading GeoJSON</h2><p>${error.message}</p>`;
-    errorDiv.style.cssText = 'position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border: 1px solid red; z-index: 1000;';
-    document.body.appendChild(errorDiv);
-  });
+        new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(popupContent).addTo(map);
+      });
+    })
+    .catch((error: Error) => {
+      console.error('Error loading GeoJSON:', error);
+      const errorDiv = document.createElement('div');
+      errorDiv.innerHTML = `<h2>Error loading GeoJSON</h2><p>${error.message}</p>`;
+      errorDiv.style.cssText =
+        'position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border: 1px solid red; z-index: 1000;';
+      document.body.appendChild(errorDiv);
+    });
+});
