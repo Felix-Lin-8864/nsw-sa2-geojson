@@ -4,8 +4,10 @@ import type { FeatureCollection, Geometry, GeoJsonProperties } from 'geojson';
 
 type AnyFeatureCollection = FeatureCollection<Geometry, GeoJsonProperties>;
 
-const MAPBOX_ACCESS_TOKEN =
-  '***REMOVED***REMOVED***REMOVED***';
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+if (!MAPBOX_ACCESS_TOKEN) {
+  throw new Error('local env MAPBOX_ACCESS_TOKEN is not set');
+}
 
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
